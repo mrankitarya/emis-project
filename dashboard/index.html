@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EMIS Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+  :root{--blue:#3b82f6;--green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--purple:#a855f7;--card:#1e2130;--border:#2d3348}
+
+  header{background:#1a1f35;border-bottom:1px solid var(--border);padding:16px 32px;display:flex;align-items:center;gap:16px}
+  header h1{font-size:20px;font-weight:600;color:#fff}
+  .badge{font-size:11px;background:#3b82f620;color:var(--blue);border:1px solid #3b82f640;border-radius:4px;padding:2px 8px}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  .container{padding:24px 32px;max-width:1400px;margin:0 auto}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+  .grid3{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+  .card h2{font-size:13px;color:#94a3b8;font-weight:500;margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em}
+
+  .metric{font-size:32px;font-weight:700;color:#fff;line-height:1}
+  .metric-sub{font-size:12px;color:#64748b;margin-top:6px}
+  .trend-up{color:var(--red)}
+  .trend-down{color:var(--green)}
+
+  .risk-bar{height:8px;border-radius:4px;background:#1e2a3a;margin:8px 0;overflow:hidden}
+  .risk-fill{height:100%;border-radius:4px;transition:width .6s ease}
+
+  .level-pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em}
+  .LOW{background:#22c55e20;color:var(--green);border:1px solid #22c55e40}
+  .MEDIUM{background:#f59e0b20;color:var(--yellow);border:1px solid #f59e0b40}
+  .HIGH{background:#ef444420;color:var(--red);border:1px solid #ef444440}
+  .CRITICAL{background:#a855f720;color:var(--purple);border:1px solid #a855f740}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{color:#64748b;font-weight:500;text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+  td{padding:10px 12px;border-bottom:1px solid #1a1f35;color:#cbd5e1}
+  tr:hover td{background:#252a3f}
+  .text-truncate{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .analyse-form{display:flex;flex-direction:column;gap:12px}
+  .analyse-form textarea,.analyse-form input{background:#252a3f;border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:#e2e8f0;font-size:13px;font-family:inherit;resize:vertical}
+  .analyse-form textarea:focus,.analyse-form input:focus{outline:none;border-color:var(--blue)}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .2s}
+  .btn:hover{opacity:.85}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-sm{padding:6px 14px;font-size:12px}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:#94a3b8}
+
+  .result-box{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;color:#94a3b8;line-height:1.6;margin-top:8px;min-height:60px}
+  .score-big{font-size:48px;font-weight:800;text-align:center;padding:16px}
+  .chart-wrap{position:relative;height:220px;width:100%}
+
+  .tabs{display:flex;gap:4px;margin-bottom:16px}
+  .tab{padding:6px 16px;font-size:13px;border-radius:6px;cursor:pointer;color:#64748b;border:1px solid transparent}
+  .tab.active{background:#3b82f620;color:var(--blue);border-color:#3b82f640}
+  .tab:hover:not(.active){color:#94a3b8}
+
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid #3b82f640;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .feature-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}
+  .feature-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e2130}
+  .feature-bar-wrap{width:80px;height:4px;background:#1e2a3a;border-radius:2px;overflow:hidden}
+  .feature-bar{height:100%;background:var(--blue);border-radius:2px}
+
+  .alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-top:8px}
+  .alert-err{background:#ef444410;border:1px solid #ef444430;color:#fca5a5}
+  .alert-ok{background:#22c55e10;border:1px solid #22c55e30;color:#86efac}
+
+  @media(max-width:900px){.grid4,.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status-dot"></div>
+  <h1>EMIS &mdash; Encrypted Multi-Modal Intelligence System</h1>
+  <span class="badge">v1.0.0</span>
+  <span class="badge" id="api-status">API: checking…</span>
+</header>
+
+<div class="container">
+
+  <!-- Stats row -->
+  <div class="grid4">
+    <div class="card">
+      <h2>Total Records</h2>
+      <div class="metric" id="stat-total">—</div>
+      <div class="metric-sub">analysed inputs</div>
+    </div>
+    <div class="card">
+      <h2>Avg Risk Score</h2>
+      <div class="metric" id="stat-avg">—</div>
+      <div class="metric-sub">0 = safe · 1 = critical</div>
+    </div>
+    <div class="card">
+      <h2>Max Risk</h2>
+      <div class="metric trend-up" id="stat-max">—</div>
+      <div class="metric-sub">highest recorded</div>
+    </div>
+    <div class="card">
+      <h2>High / Critical</h2>
+      <div class="metric trend-up" id="stat-hc">—</div>
+      <div class="metric-sub">need attention</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="grid2">
+    <div class="card">
+      <h2>Risk level distribution</h2>
+      <div class="chart-wrap"><canvas id="chartDist"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Score timeline</h2>
+      <div class="chart-wrap"><canvas id="chartTimeline"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Analyse + Records -->
+  <div class="grid3">
+
+    <!-- Left: Analyser -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('encrypt')">Encrypt + Analyse</div>
+        <div class="tab" onclick="switchTab('raw')">Raw Ciphertext</div>
+      </div>
+
+      <div id="tab-encrypt" class="analyse-form">
+        <textarea id="plain-text" rows="4" placeholder="Enter plaintext to analyse…
+e.g. 'Suspicious login attempt detected from unknown IP. Possible ransomware activity.'"></textarea>
+        <label style="font-size:12px;color:#64748b">Optional image (will be encrypted automatically)</label>
+        <input type="file" id="image-file" accept="image/*"/>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="encryptAndAnalyse()" id="btn-analyse">Analyse</button>
+          <button class="btn btn-outline btn-sm" onclick="loadDemo()">Load demo</button>
+        </div>
+      </div>
+
+      <div id="tab-raw" class="analyse-form" style="display:none">
+        <textarea id="cipher-text" rows="4" placeholder="Paste encrypted ciphertext…"></textarea>
+        <button class="btn" onclick="analyseRaw()" id="btn-raw">Analyse ciphertext</button>
+      </div>
+
+      <div id="result-area" style="display:none;margin-top:16px">
+        <div class="score-big" id="result-score"></div>
+        <div style="text-align:center;margin-bottom:12px" id="result-level"></div>
+        <div class="result-box" id="result-explanation"></div>
+        <div style="margin-top:16px">
+          <h2 style="font-size:12px;color:#64748b;margin-bottom:10px">FEATURE IMPORTANCE</h2>
+          <div class="feature-grid" id="feature-list"></div>
+        </div>
+      </div>
+      <div id="error-area"></div>
+    </div>
+
+    <!-- Right: Recent records -->
+    <div class="card" style="overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 style="margin:0">Recent Records</h2>
+        <button class="btn btn-outline btn-sm" onclick="loadData()">↻ Refresh</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Level</th><th>Score</th><th>Text</th></tr>
+        </thead>
+        <tbody id="records-body">
+          <tr><td colspan="4" style="text-align:center;color:#475569;padding:24px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : '';   // same origin on Render
+
+let distChart, timelineChart;
+const DEMO_TEXT = "CRITICAL: Unauthorized access detected. Ransomware payload identified on server node-7. Backdoor exploit CVE-2024-1234 confirmed. Immediate action required.";
+
+// ---- Tab switch -------------------------------------------------------- //
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', (i===0&&t==='encrypt')||(i===1&&t==='raw')));
+  document.getElementById('tab-encrypt').style.display = t==='encrypt'?'':'none';
+  document.getElementById('tab-raw').style.display    = t==='raw'?'':'none';
+}
+
+// ---- Demo data --------------------------------------------------------- //
+function loadDemo() {
+  document.getElementById('plain-text').value = DEMO_TEXT;
+}
+
+// ---- Colour helpers ---------------------------------------------------- //
+function levelColor(l) {
+  return {LOW:'#22c55e',MEDIUM:'#f59e0b',HIGH:'#ef4444',CRITICAL:'#a855f7'}[l]||'#64748b';
+}
+function scoreColor(s) {
+  if(s<0.25) return '#22c55e';
+  if(s<0.5)  return '#f59e0b';
+  if(s<0.75) return '#ef4444';
+  return '#a855f7';
+}
+
+// ---- API helpers ------------------------------------------------------- //
+async function apiFetch(path, opts={}) {
+  const r = await fetch(API+path, opts);
+  if(!r.ok) { const e=await r.json().catch(()=>({detail:r.statusText})); throw new Error(e.detail||r.statusText); }
+  return r.json();
+}
+
+// ---- Encrypt + Analyse ------------------------------------------------- //
+async function encryptAndAnalyse() {
+  const text = document.getElementById('plain-text').value.trim();
+  if(!text) return;
+  setLoading(true,'btn-analyse');
+  clearResult();
+  try {
+    // 1. Encrypt text
+    const enc = await apiFetch('/api/encrypt/text',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({plaintext: text})
+    });
+
+    // 2. Optional image
+    let encImgB64 = null;
+    const imgFile = document.getElementById('image-file').files[0];
+    if(imgFile) {
+      const fd = new FormData(); fd.append('file', imgFile);
+      const eImg = await apiFetch('/api/encrypt/image',{method:'POST',body:fd});
+      encImgB64 = eImg.encrypted_image_b64;
+    }
+
+    // 3. Analyse
+    const res = await apiFetch('/api/analyse',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({encrypted_text: enc.ciphertext, encrypted_image_b64: encImgB64})
+    });
+    showResult(res);
+    loadData();
+  } catch(e) {
+    showError(e.message);
+  }
+  setLoading(false,'btn-analyse');
+}
+
+async function analyseRaw() {
+  const ct = document.getElementById('cipher-text').value.trim();
+  if(!ct) return;
+  setLoading(true,'btn-raw');
+  clearResult();
+  try {
+    const res = await apiFetch('/api/analyse',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({encrypted_text: ct})
+    });
+    showResult(res);
+    loadData();
+  } catch(e) { showError(e.message); }
+  setLoading(false,'btn-raw');
+}
+
+// ---- Display result ---------------------------------------------------- //
+function showResult(res) {
+  const score = res.risk_score;
+  const col   = scoreColor(score);
+  document.getElementById('result-score').textContent = (score*100).toFixed(1)+'%';
+  document.getElementById('result-score').style.color = col;
+  document.getElementById('result-level').innerHTML = `<span class="level-pill ${res.risk_level}">${res.risk_level}</span>`;
+  document.getElementById('result-explanation').textContent = res.explanation;
+
+  // Feature importance
+  const fl = document.getElementById('feature-list');
+  fl.innerHTML = '';
+  const imp = res.risk?.feature_importance || {};
+  Object.entries(imp).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([k,v])=>{
+    fl.innerHTML += `
+      <div class="feature-item">
+        <span style="color:#94a3b8">${k.replace(/_/g,' ')}</span>
+        <div class="feature-bar-wrap"><div class="feature-bar" style="width:${(v*100).toFixed(0)}%"></div></div>
+      </div>`;
+  });
+
+  document.getElementById('result-area').style.display='block';
+  document.getElementById('error-area').innerHTML='';
+}
+
+function clearResult() {
+  document.getElementById('result-area').style.display='none';
+  document.getElementById('error-area').innerHTML='';
+}
+
+function showError(msg) {
+  document.getElementById('error-area').innerHTML = `<div class="alert alert-err">⚠ ${msg}</div>`;
+}
+
+function setLoading(on, id) {
+  const btn = document.getElementById(id);
+  if(!btn) return;
+  btn.disabled = on;
+  btn.innerHTML = on ? '<span class="spinner"></span>Analysing…' : btn.textContent.replace(/.*Analysing…/,'Analyse');
+  if(!on) btn.innerHTML = id==='btn-raw'?'Analyse ciphertext':'Analyse';
+}
+
+// ---- Load dashboard data ---------------------------------------------- //
+async function loadData() {
+  try {
+    const [stats, recsResp] = await Promise.all([
+      apiFetch('/api/stats'), apiFetch('/api/records?limit=50')
+    ]);
+
+    // Stats cards
+    document.getElementById('stat-total').textContent = stats.total||0;
+    document.getElementById('stat-avg').textContent   = stats.avg_risk!=null ? (stats.avg_risk*100).toFixed(1)+'%' : '—';
+    document.getElementById('stat-max').textContent   = stats.max_risk!=null ? (stats.max_risk*100).toFixed(1)+'%' : '—';
+    const hc = (stats.distribution?.HIGH||0)+(stats.distribution?.CRITICAL||0);
+    document.getElementById('stat-hc').textContent = hc;
+
+    // Distribution chart
+    const dist = stats.distribution||{};
+    const lvls = ['LOW','MEDIUM','HIGH','CRITICAL'];
+    const dvals = lvls.map(l=>dist[l]||0);
+    const dcolors = ['#22c55e','#f59e0b','#ef4444','#a855f7'];
+    if(distChart) distChart.destroy();
+    distChart = new Chart(document.getElementById('chartDist'),{
+      type:'doughnut',
+      data:{labels:lvls, datasets:[{data:dvals,backgroundColor:dcolors.map(c=>c+'cc'),borderColor:dcolors,borderWidth:1.5}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:12}}}}}
+    });
+
+    // Timeline chart
+    const recs = (recsResp.records||[]).slice().reverse().slice(-30);
+    if(timelineChart) timelineChart.destroy();
+    timelineChart = new Chart(document.getElementById('chartTimeline'),{
+      type:'line',
+      data:{
+        labels: recs.map(r=>r.timestamp?r.timestamp.slice(11,19):''),
+        datasets:[{
+          label:'Risk score',
+          data: recs.map(r=>+(r.risk_score*100).toFixed(1)),
+          borderColor:'#3b82f6', backgroundColor:'#3b82f620',
+          fill:true, tension:.4, pointRadius:3
+        }]
+      },
+      options:{responsive:true,maintainAspectRatio:false,
+        scales:{
+          x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2130'}},
+          y:{min:0,max:100,ticks:{color:'#64748b',font:{size:10},callback:v=>v+'%'},grid:{color:'#1e2130'}}
+        },
+        plugins:{legend:{display:false}}
+      }
+    });
+
+    // Records table
+    const tbody = document.getElementById('records-body');
+    if(!recs.length){
+      tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:#475569;padding:24px">No records yet. Run an analysis!</td></tr>';
+    } else {
+      tbody.innerHTML = recsResp.records.slice(0,20).map(r=>`
+        <tr>
+          <td style="color:#64748b;font-size:11px">${(r.timestamp||'').slice(11,19)}</td>
+          <td><span class="level-pill ${r.risk_level}">${r.risk_level||'—'}</span></td>
+          <td style="color:${scoreColor(r.risk_score||0)};font-weight:600">${((r.risk_score||0)*100).toFixed(1)}%</td>
+          <td class="text-truncate" title="${(r.decrypted_text||'').replace(/"/g,'')}">${(r.decrypted_text||'—').slice(0,60)}</td>
+        </tr>`).join('');
+    }
+
+  } catch(e) {
+    console.error('Dashboard data error:', e);
+  }
+}
+
+// ---- API health check -------------------------------------------------- //
+async function checkAPI() {
+  try {
+    await apiFetch('/health');
+    document.getElementById('api-status').textContent='API: online';
+    document.getElementById('api-status').style.background='#22c55e20';
+    document.getElementById('api-status').style.color='#22c55e';
+  } catch {
+    document.getElementById('api-status').textContent='API: offline';
+    document.getElementById('api-status').style.background='#ef444420';
+    document.getElementById('api-status').style.color='#ef4444';
+  }
+}
+
+// ---- Init -------------------------------------------------------------- //
+checkAPI();
+loadData();
+setInterval(loadData, 15000);  // auto-refresh every 15s
+</script>
+</body>
+</html>

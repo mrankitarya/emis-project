@@ -1,0 +1,176 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: emis
+
+---
+# Secret (replace values with base64 encoded secrets)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: emis-secrets
+  namespace: emis
+type: Opaque
+stringData:
+  EMIS_SECRET_KEY: "change-me-in-production"
+  MONGO_URI: ""
+  REDIS_URL: "redis://redis-service:6379/0"
+
+---
+# API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emis-api
+  namespace: emis
+  labels:
+    app: emis-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: emis-api
+  template:
+    metadata:
+      labels:
+        app: emis-api
+    spec:
+      containers:
+      - name: api
+        image: ghcr.io/YOUR_USERNAME/emis:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: emis-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+
+---
+# API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: emis-api-service
+  namespace: emis
+spec:
+  selector:
+    app: emis-api
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: ClusterIP
+
+---
+# Celery Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emis-worker
+  namespace: emis
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: emis-worker
+  template:
+    metadata:
+      labels:
+        app: emis-worker
+    spec:
+      containers:
+      - name: worker
+        image: ghcr.io/YOUR_USERNAME/emis:latest
+        command: ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info"]
+        envFrom:
+        - secretRef:
+            name: emis-secrets
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: emis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: emis
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: emis-ingress
+  namespace: emis
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: emis.yourdomain.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: emis-api-service
+            port:
+              number: 80
