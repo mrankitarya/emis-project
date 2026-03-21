@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Upgrade pip + install pip-tools to help with resolution ──────────────────
+# ── Upgrade pip ───────────────────────────────────────────────────────────────
 RUN pip install --upgrade pip setuptools wheel
 
-# ── STEP 1: Install PyTorch CPU separately first (largest dep, anchors graph) ─
+# ── STEP 1: PyTorch CPU (largest package, install alone first) ────────────────
 RUN pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     torch==2.2.2+cpu \
@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir \
     numpy==1.26.4 \
     scipy==1.13.0
 
-# ── STEP 3: Install spaCy sub-deps explicitly (avoids murmurhash conflict) ───
+# ── STEP 3: spaCy sub-deps explicitly (kills murmurhash conflict) ─────────────
 RUN pip install --no-cache-dir \
     murmurhash==1.0.10 \
     cymem==2.0.8 \
@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir \
     thinc==8.2.4 \
     spacy==3.7.4
 
-# ── STEP 4: Install the rest of requirements ─────────────────────────────────
+# ── STEP 4: Everything else from requirements.txt ────────────────────────────
 COPY requirements.txt .
 RUN pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
