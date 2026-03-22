@@ -1,18 +1,12 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# NOTE: torch, torchvision, numpy, scipy, spacy + sub-deps,
-#       transformers, scikit-learn, xgboost are pre-installed in the Dockerfile
-#       in the correct order. This file only lists what remains.
-# ─────────────────────────────────────────────────────────────────────────────
-
 # ── Web framework ─────────────────────────────────────────────────────────────
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 python-multipart==0.0.9
 starlette==0.37.2
 
-# ── Pydantic ──────────────────────────────────────────────────────────────────
+# ── Pydantic (pydantic-core version MUST match what pydantic==2.7.1 demands) ──
 pydantic==2.7.1
-pydantic-core==2.18.3
+pydantic-core==2.18.2
 
 # ── Computer Vision ───────────────────────────────────────────────────────────
 opencv-python-headless==4.9.0.80
@@ -34,10 +28,6 @@ flower==2.0.1
 python-dotenv==1.0.1
 httpx==0.27.0
 anyio==4.4.0
-click==8.1.7
-packaging==24.0
-typing_extensions==4.11.0
-filelock==3.14.0
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.2.0
