@@ -1,64 +1,44 @@
-# Web framework
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTE: torch, torchvision, numpy, scipy, spacy + sub-deps,
+#       transformers, scikit-learn, xgboost are pre-installed in the Dockerfile
+#       in the correct order. This file only lists what remains.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Web framework ─────────────────────────────────────────────────────────────
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 python-multipart==0.0.9
+starlette==0.37.2
 
-# ML & DL
-scikit-learn==1.4.2
-xgboost==2.0.3
-torch==2.2.2+cpu
-torchvision==0.17.2+cpu
-transformers==4.40.0
-tokenizers==0.19.1
-huggingface-hub==0.23.0
-safetensors==0.4.3
-accelerate==0.30.0
+# ── Pydantic ──────────────────────────────────────────────────────────────────
+pydantic==2.7.1
+pydantic-core==2.18.3
 
-# NLP dependencies
-spacy==3.7.4
-murmurhash==1.0.10
-cymem==2.0.8
-preshed==3.0.9
-blis==0.7.11
-thinc==8.2.4
-catalogue==2.0.10
-confection==0.1.5
-weasel==0.3.4
-langcodes==3.5.1
-language-data==1.2.0
-srsly==2.5.2
-wasabi==1.1.3
-smart-open==6.3.0
+# ── Computer Vision ───────────────────────────────────────────────────────────
+opencv-python-headless==4.9.0.80
+Pillow==10.3.0
 
-# Database & async
+# ── Database ──────────────────────────────────────────────────────────────────
 motor==3.4.0
 pymongo==4.7.2
 dnspython==2.6.1
+
+# ── Async task queue ──────────────────────────────────────────────────────────
 celery==5.4.0
 redis==5.0.4
 kombu==5.3.4
 billiard==4.2.0
-vine==5.1.0
 flower==2.0.1
 
-# HTTP & utilities
-httpx==0.27.0
-httpcore==1.0.5
-h11==0.14.0
+# ── Utils ─────────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
+httpx==0.27.0
+anyio==4.4.0
 click==8.1.7
 packaging==24.0
 typing_extensions==4.11.0
 filelock==3.14.0
-fsspec==2024.5.0
-tqdm==4.66.4
-PyYAML==6.0.1
-regex==2024.5.15
-requests==2.32.2
-certifi==2024.2.2
-charset-normalizer==3.3.2
-idna==3.7
 
-# Testing
+# ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.2.0
 pytest-asyncio==0.23.6
