@@ -37,6 +37,13 @@ RUN pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r requirements.txt
 
+
+# ── STEP 4: Everything else from requirements.txt ────────────────────────────
+COPY requirements.txt .
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt
+
 # ── STEP 5: Download spaCy English model ─────────────────────────────────────
 RUN python -m spacy download en_core_web_sm || true
 
