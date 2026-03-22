@@ -1,19 +1,12 @@
 """
-Vision Agent
-------------
-Performs anomaly / defect detection on an input image.
-
-Two-tier approach:
-  1. Primary  – PyTorch autoencoder (reconstruction error as anomaly score)
-  2. Fallback – OpenCV statistical analysis (variance, edge density, colour hist)
-
-Returns a CVResult with numeric anomaly_score (0..1) for the risk model.
+Vision Agent - Lightweight version for Render free tier (512MB RAM)
+Uses OpenCV + numpy statistical analysis only.
+No PyTorch autoencoder (saves ~800MB RAM).
 """
 from __future__ import annotations
 
 import base64
 import io
-import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,8 +15,8 @@ import numpy as np
 
 @dataclass
 class CVResult:
-    anomaly_score: float = 0.0        # 0 = normal, 1 = highly anomalous
-    method: str = "unknown"
+    anomaly_score: float = 0.0
+    method: str = "none"
     reconstruction_error: float | None = None
     edge_density: float | None = None
     variance: float | None = None
@@ -42,149 +35,85 @@ class CVResult:
         }
 
 
-# ---------------------------------------------------------------------------
-# PyTorch autoencoder (advanced path)
-# ---------------------------------------------------------------------------
+def _numpy_analyse(img_array: np.ndarray) -> CVResult:
+    """Pure numpy statistical anomaly detection — no heavy deps."""
+    result = CVResult(method="statistical")
+    flat = img_array.flatten().astype(np.float32)
 
-class ConvAutoencoder:
-    """Lightweight Conv autoencoder – trained at inference time on the image
-    itself for one-shot anomaly detection (no external dataset needed)."""
-
-    IMG_SIZE = 64
-    EPOCHS = 30
-    LR = 1e-3
-
-    def __init__(self):
-        import torch
-        import torch.nn as nn
-        self.torch = torch
-        self.nn = nn
-
-        class AE(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.enc = nn.Sequential(
-                    nn.Conv2d(1, 16, 3, stride=2, padding=1), nn.ReLU(),
-                    nn.Conv2d(16, 8, 3, stride=2, padding=1), nn.ReLU(),
-                )
-                self.dec = nn.Sequential(
-                    nn.ConvTranspose2d(8, 16, 3, stride=2, padding=1, output_padding=1), nn.ReLU(),
-                    nn.ConvTranspose2d(16, 1, 3, stride=2, padding=1, output_padding=1), nn.Sigmoid(),
-                )
-
-            def forward(self, x):
-                return self.dec(self.enc(x))
-
-        self.model = AE()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.LR)
-        self.criterion = nn.MSELoss()
-
-    def _preprocess(self, img_array: np.ndarray):
-        import cv2
-        gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
-        resized = cv2.resize(gray, (self.IMG_SIZE, self.IMG_SIZE))
-        tensor = self.torch.tensor(resized, dtype=self.torch.float32).unsqueeze(0).unsqueeze(0) / 255.0
-        return tensor
-
-    def fit_and_score(self, img_array: np.ndarray) -> float:
-        """Train on image, return reconstruction error as anomaly score."""
-        x = self._preprocess(img_array)
-        self.model.train()
-        for _ in range(self.EPOCHS):
-            self.optimizer.zero_grad()
-            out = self.model(x)
-            loss = self.criterion(out, x)
-            loss.backward()
-            self.optimizer.step()
-
-        self.model.eval()
-        with self.torch.no_grad():
-            out = self.model(x)
-            mse = self.criterion(out, x).item()
-
-        # Normalise: typical well-reconstructed images score < 0.01
-        score = min(mse * 50, 1.0)
-        return round(score, 4)
-
-
-# ---------------------------------------------------------------------------
-# OpenCV fallback
-# ---------------------------------------------------------------------------
-
-def _opencv_analyse(img_array: np.ndarray) -> CVResult:
-    try:
-        import cv2
-    except ImportError:
-        return _numpy_only_analyse(img_array)
-
-    result = CVResult(method="opencv")
-
-    gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
-
-    # Variance (low = uniform / suspicious)
-    var = float(np.var(gray))
+    # Variance (low = uniform/suspicious blank image)
+    var = float(np.var(flat))
     result.variance = round(var, 2)
 
-    # Edge density via Canny
-    edges = cv2.Canny(gray, 50, 150)
-    edge_density = float(np.sum(edges > 0)) / edges.size
-    result.edge_density = round(edge_density, 4)
+    # Mean brightness
+    mean_val = float(np.mean(flat))
 
-    # Colour histogram anomaly (check for unusual distributions)
-    hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).flatten()
-    hist_norm = hist / hist.sum()
-    entropy = -float(np.sum(hist_norm * np.log(hist_norm + 1e-9)))
-    max_entropy = math.log(256)
+    # Histogram entropy — measures randomness/noise
+    hist, _ = np.histogram(flat, bins=64, range=(0, 255))
+    hist_norm = hist / (hist.sum() + 1e-9)
+    entropy = float(-np.sum(hist_norm * np.log(hist_norm + 1e-9)))
+    max_entropy = float(np.log(64))
     entropy_ratio = entropy / max_entropy
 
-    # Blob detection for defects
-    params = cv2.SimpleBlobDetector_Params()
-    params.minThreshold = 10
-    params.maxThreshold = 200
-    params.filterByArea = True
-    params.minArea = 50
-    detector = cv2.SimpleBlobDetector_create(params)
-    keypoints = detector.detect(gray)
-    result.defects_detected = len(keypoints) > 3
+    # Simple edge detection via gradient
+    if len(img_array.shape) == 3:
+        gray = np.mean(img_array, axis=2)
+    else:
+        gray = img_array.astype(np.float32)
 
-    # Composite anomaly score
-    var_score = max(0.0, 1.0 - var / 5000.0)          # low variance → higher risk
-    edge_score = min(edge_density * 10, 1.0)
-    entropy_score = max(0.0, 1.0 - entropy_ratio)
-    defect_score = 0.3 if result.defects_detected else 0.0
+    gx = np.abs(np.diff(gray, axis=1)).mean()
+    gy = np.abs(np.diff(gray, axis=0)).mean()
+    edge_density = float((gx + gy) / 255.0)
+    result.edge_density = round(edge_density, 4)
+
+    # Anomaly scoring
+    var_score = max(0.0, 1.0 - var / 8000.0)        # low variance → suspicious
+    noise_score = max(0.0, 1.0 - entropy_ratio)      # low entropy → suspicious
+    brightness_score = abs(mean_val - 127.5) / 127.5  # extreme brightness
 
     result.anomaly_score = round(
-        0.3 * var_score + 0.3 * edge_score + 0.2 * entropy_score + 0.2 * defect_score,
-        4
+        0.4 * var_score + 0.3 * noise_score + 0.3 * brightness_score, 4
     )
+    result.defects_detected = result.anomaly_score > 0.5
     result.details = {
         "variance": var,
-        "edge_density": edge_density,
         "entropy_ratio": round(entropy_ratio, 4),
-        "blob_count": len(keypoints),
+        "edge_density": edge_density,
+        "mean_brightness": round(mean_val, 2),
     }
     return result
 
 
-def _numpy_only_analyse(img_array: np.ndarray) -> CVResult:
-    """Pure-numpy fallback when OpenCV is unavailable."""
-    result = CVResult(method="numpy_fallback")
-    flat = img_array.flatten().astype(np.float32)
-    var = float(np.var(flat))
-    result.variance = round(var, 2)
-    result.anomaly_score = round(max(0.0, 1.0 - var / 10000.0), 4)
-    return result
+def _opencv_analyse(img_array: np.ndarray) -> CVResult:
+    """OpenCV analysis with edge + blob detection."""
+    try:
+        import cv2
+        result = CVResult(method="opencv")
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY) if len(img_array.shape) == 3 else img_array
+        var = float(np.var(gray))
+        result.variance = round(var, 2)
+        edges = cv2.Canny(gray, 50, 150)
+        edge_density = float(np.sum(edges > 0)) / edges.size
+        result.edge_density = round(edge_density, 4)
 
+        hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).flatten()
+        hist_norm = hist / hist.sum()
+        import math
+        entropy = -float(np.sum(hist_norm * np.log(hist_norm + 1e-9)))
+        entropy_ratio = entropy / math.log(256)
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
+        var_score = max(0.0, 1.0 - var / 5000.0)
+        edge_score = min(edge_density * 10, 1.0)
+        entropy_score = max(0.0, 1.0 - entropy_ratio)
+
+        result.anomaly_score = round(0.4 * var_score + 0.3 * edge_score + 0.3 * entropy_score, 4)
+        result.defects_detected = result.anomaly_score > 0.5
+        result.details = {"variance": var, "edge_density": edge_density, "entropy_ratio": round(entropy_ratio, 4)}
+        return result
+    except Exception:
+        return _numpy_analyse(img_array)
+
 
 def analyse_image(image_bytes: bytes) -> CVResult:
-    """
-    Accepts raw image bytes.
-    Tries PyTorch autoencoder first, falls back to OpenCV, then numpy.
-    """
     try:
         from PIL import Image
         pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -194,26 +123,8 @@ def analyse_image(image_bytes: bytes) -> CVResult:
         result.details = {"error": str(e)}
         result.anomaly_score = 0.5
         return result
-
-    # Try PyTorch autoencoder
-    try:
-        ae = ConvAutoencoder()
-        recon_err = ae.fit_and_score(img_array)
-        result = CVResult(
-            anomaly_score=recon_err,
-            method="pytorch_autoencoder",
-            reconstruction_error=recon_err,
-            defects_detected=recon_err > 0.5,
-        )
-        return result
-    except Exception:
-        pass
-
-    # Fall back to OpenCV
     return _opencv_analyse(img_array)
 
 
 def analyse_image_b64(b64_string: str) -> CVResult:
-    """Accepts base64-encoded image string."""
-    image_bytes = base64.b64decode(b64_string)
-    return analyse_image(image_bytes)
+    return analyse_image(base64.b64decode(b64_string))
